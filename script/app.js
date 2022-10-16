@@ -1,79 +1,93 @@
 // _ = helper functions
 const appid = "39bdad575d61fe086ce966346f08b225"
 let htmlElements = {}
+let sunTiming = {}
+const timeout = 60000; // change how fast the sun moves
 
-
-// 5 TODO: maak updateSun functie
-
-// 4 Zet de zon op de juiste plaats en zorg ervoor dat dit iedere minuut gebeurt.
-let placeSunAndStartMoving = (totalMinutes, sunrise) => {
-    // In de functie moeten we eerst wat zaken ophalen en berekenen.
-    // Haal het DOM element van onze zon op en van onze aantal minuten resterend deze dag.
-    // Bepaal het aantal minuten dat de zon al op is.
-    // Nu zetten we de zon op de initiële goede positie ( met de functie updateSun ). Bereken hiervoor hoeveel procent er van de totale zon-tijd al voorbij is.
-    // We voegen ook de 'is-loaded' class toe aan de body-tag.
-    // Vergeet niet om het resterende aantal minuten in te vullen.
-    // Nu maken we een functie die de zon elke minuut zal updaten
-    // Bekijk of de zon niet nog onder of reeds onder is
-    // Anders kunnen we huidige waarden evalueren en de zon updaten via de updateSun functie.
-    // PS.: vergeet weer niet om het resterend aantal minuten te updaten en verhoog het aantal verstreken minuten.
-};
 
 const makeReadableTimeFromTimeStamp = (time) => {
     return new Date(time * 1000).toLocaleTimeString(['nl-be'], {
-        hour: "2-digit",
-        minute: "2-digit"
+        hour: "2-digit", minute: "2-digit"
     })
 }
 
-const updateTimeOfSun = () => {
-    htmlElements.sun.dataset.time =
-        new Date().toLocaleTimeString(['nl-be'], {
-            hour: '2-digit',
-            minute: '2-digit',
-        });
+const updateTimeOfSun = (now) => {
+    htmlElements.sun.dataset.time = new Date(now).toLocaleTimeString(['nl-be'], {
+        hour: '2-digit', minute: '2-digit',
+    });
 }
 
 // place sun on left and bottom position
+const placeSun = (currentMs) => {
+    // calculate the percentage of the day that has passed
+    console.log(currentMs)
+    const percentageOfDayPassed = (currentMs - sunTiming.sunriseMs) / (sunTiming.sunsetMs - sunTiming.sunriseMs)
+    const sunLeftPosition = percentageOfDayPassed * 100
+    // make curve for bottom position where 0% is lowest, 50% is highest and 100% is lowest again
+    const sunBottomPosition = Math.sin(Math.PI * percentageOfDayPassed) * 100;
+    console.log(sunBottomPosition, "sunBottomPosition")
 
-const placeSun = (sunrise, totalTime)=>{
-    const now = new Date()
-    const sunriseDate = new Date(sunrise * 1000)
-    const minutesLeft =
-        now.getHours() * 60 +
-        now.getMinutes() -
-        (sunriseDate.getHours() * 60 + sunriseDate.getMinutes())
-    const percentage =
-        (100 / (totalTime.getHours() * 60 + totalTime.getMinutes())) * minutesLeft
+    htmlElements.sun.style.left = `${sunLeftPosition}%`;
+    htmlElements.sun.style.bottom = `${sunBottomPosition}%`;
+}
 
-    const sunLeftPosition = percentage
-    const sunBottomPosition = percentage > 50 ? 100 - percentage : percentage * 2
+const updateTimeLeft = (now) => {
+    let timeDifferenceMs = sunTiming.sunsetMs - new Date(now).getTime()
+    const hours = Math.floor(timeDifferenceMs / 1000 / 60 / 60)
+    const minutes = Math.floor(timeDifferenceMs / 1000 / 60) - hours * 60
+    if (hours < 0) {
+        htmlElements.timeLeft.innerText = "No more"
+    } else {
+        htmlElements.timeLeft.innerText = hours !== 0 ? `${hours} hours and ${minutes} minutes` : `${minutes} minutes`
+    }
+}
 
-    htmlElements.sun.style.left = `${sunLeftPosition}%`
-    htmlElements.sun.style.bottom = `${sunBottomPosition}%`
-   }
+
+async function checkNight(now) {
+    if (now > sunTiming.sunsetMs || now < sunTiming.sunriseMs) {
+        document.documentElement.classList.add('is-night')
+        document.documentElement.classList.remove('is-day')
+    } else {
+        document.documentElement.classList.remove('is-night')
+        document.documentElement.classList.add('is-day')
+    }
+    // also check if a new day has started
+    if (now > sunTiming.sunsetMs) {
+        // get new data
+        showResult(await getAPI(50.8027841, 3.2097454))
+    }
+    return true
+}
+
+let globalNow = new Date().getTime();
+
+let startLoop = () => {
+    setInterval(() => {
+        globalNow += 60000;
+        const now = globalNow;
+        updateTimeOfSun(now);
+        placeSun(now);
+        updateTimeLeft(now);
+        checkNight(now).catch((e) => console.error(e));
+    }, timeout)
+}
+
 
 // 3 Met de data van de API kunnen we de app opvullen
 let showResult = queryResponse => {
     htmlElements.location.innerText = `${queryResponse.city.name}, ${queryResponse.city.country}`
-    const sunriseDate = new Date(queryResponse.city.sunrise * 1000)
     htmlElements.sunset.innerText = makeReadableTimeFromTimeStamp(queryResponse.city.sunset);
     htmlElements.sunrise.innerText = makeReadableTimeFromTimeStamp(queryResponse.city.sunrise);
+    sunTiming.sunriseMs = queryResponse.city.sunrise * 1000;
+    sunTiming.sunsetMs = queryResponse.city.sunset * 1000;
+    sunTiming.diff = sunTiming.sunsetMs - sunTiming.sunriseMs;
+    const now = new Date().getTime();
+    updateTimeOfSun(now);
+    updateTimeLeft(now);
+    checkNight(now).catch((e) => console.error(e));
+    placeSun(new Date().getTime())
+    startLoop();
 
-    updateTimeOfSun();
-    let timeDifferenceMs =new Date().getTime() - queryResponse.city.sunset * 1000
-    const hours = Math.floor(timeDifferenceMs / 1000 / 60 / 60)
-    const minutes = Math.floor(timeDifferenceMs / 1000 / 60) - hours * 60
-    console.log(hours, minutes)
-    if (hours){
-    
-    }
-
-    // We gaan eerst een paar onderdelen opvullen
-    // Zorg dat de juiste locatie weergegeven wordt, volgens wat je uit de API terug krijgt.
-    // Toon ook de juiste tijd voor de opkomst van de zon en de zonsondergang.
-    // Hier gaan we een functie oproepen die de zon een bepaalde positie kan geven en dit kan updaten.
-    // Geef deze functie de periode tussen sunrise en sunset mee en het tijdstip van sunrise.
 };
 
 
@@ -111,7 +125,7 @@ const init = async () => {
 
 document.addEventListener('DOMContentLoaded', function () {
     // 1 We will query the API with longitude and latitude.
-    init();
+    init().catch((e) => console.error(e));
 
 
 });
